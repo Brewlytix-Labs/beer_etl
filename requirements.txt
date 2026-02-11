@@ -1,5 +1,7 @@
 # Astro Runtime includes the following pre-installed providers packages: https://www.astronomer.io/docs/astro/runtime-image-architecture#provider-packages
-duckdb
+# MongoDB provider is not included by default; required for style_etl_dag.py
+apache-airflow-providers-mongo>=5.0.0
+duckdb==1.3.2
 pandas
 requests
 beautifulsoup4

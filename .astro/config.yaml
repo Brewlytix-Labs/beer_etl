@@ -1,5 +1,7 @@
+postgres:
+    port: "5433"
 project:
-    name: beer-etl
     mounts:
         - source: ./inlcude/data
           target: data
+    name: beer-etl
