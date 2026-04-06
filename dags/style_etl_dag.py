@@ -21,7 +21,7 @@ from airflow.operators.python import PythonOperator
 from airflow.exceptions import AirflowNotFoundException
 from airflow.models import Variable
 from airflow.providers.postgres.hooks.postgres import PostgresHook
-from airflow.utils.dates import days_ago
+from datetime import datetime, timedelta
 import json
 import uuid
 from typing import List, Dict, Any, Tuple, Optional
@@ -47,7 +47,7 @@ dag = DAG(
     default_args=default_args,
     description='ETL DAG to sync beer styles from MongoDB to PostgreSQL (style_guides, style_categories, styles)',
     schedule=None,  # Not scheduled; trigger manually
-    start_date=days_ago(1),
+    start_date=datetime(2026, 1, 1),
     catchup=False,
     tags=['etl', 'styles', 'mongodb', 'postgresql'],
 )
