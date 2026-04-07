@@ -48,19 +48,16 @@ with DAG(
     t1 = PythonOperator(
         task_id="extract_fermentables",
         python_callable=extract_fermentables,
-        provide_context=True,
     )
 
     t2 = PythonOperator(
         task_id="transform_fermentables",
         python_callable=transform_fermentables,
-        provide_context=True,
     )
 
     t3 = PythonOperator(
         task_id="load_fermentables",
         python_callable=load_fermentables,
-        provide_context=True,
     )
 
     t1 >> t2 >> t3
