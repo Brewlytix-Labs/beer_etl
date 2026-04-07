@@ -51,19 +51,16 @@ with DAG(
     t1 = PythonOperator(
         task_id="extract_clone_recipes",
         python_callable=extract_clone_recipes,
-        provide_context=True,
     )
 
     t2 = PythonOperator(
         task_id="transform_clone_recipes",
         python_callable=transform_clone_recipes,
-        provide_context=True,
     )
 
     t3 = PythonOperator(
         task_id="load_clone_recipes",
         python_callable=load_clone_recipes,
-        provide_context=True,
     )
 
     t1 >> t2 >> t3
