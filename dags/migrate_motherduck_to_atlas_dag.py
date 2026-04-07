@@ -305,83 +305,70 @@ with DAG(
     extract_styles_task = PythonOperator(
         task_id="extract_styles_from_motherduck",
         python_callable=extract_styles_from_motherduck,
-        provide_context=True,
     )
 
     transform_styles_task = PythonOperator(
         task_id="transform_styles_for_mongodb",
         python_callable=transform_styles_for_mongodb,
-        provide_context=True,
     )
 
     load_styles_task = PythonOperator(
         task_id="load_styles_to_mongodb",
         python_callable=load_styles_to_mongodb,
-        provide_context=True,
     )
 
     # Hops Migration - DISABLED FOR NOW
     # extract_hops_task = PythonOperator(
     #     task_id="extract_hops_from_motherduck",
     #     python_callable=extract_hops_from_motherduck,
-    #     provide_context=True,
     # )
 
     # transform_hops_task = PythonOperator(
     #     task_id="transform_hops_for_mongodb",
     #     python_callable=transform_hops_for_mongodb,
-    #     provide_context=True,
     # )
 
     # load_hops_task = PythonOperator(
     #     task_id="load_hops_to_mongodb",
     #     python_callable=load_hops_to_mongodb,
-    #     provide_context=True,
     # )
 
     # Fermentables Migration - DISABLED FOR NOW
     # extract_fermentables_task = PythonOperator(
     #     task_id="extract_fermentables_from_motherduck",
     #     python_callable=extract_fermentables_from_motherduck,
-    #     provide_context=True,
     # )
 
     # transform_fermentables_task = PythonOperator(
     #     task_id="transform_fermentables_for_mongodb",
     #     python_callable=transform_fermentables_for_mongodb,
-    #     provide_context=True,
     # )
 
     # load_fermentables_task = PythonOperator(
     #     task_id="load_fermentables_to_mongodb",
     #     python_callable=load_fermentables_to_mongodb,
-    #     provide_context=True,
     # )
 
     # Yeasts Migration - DISABLED FOR NOW
     # extract_yeasts_task = PythonOperator(
     #     task_id="extract_yeasts_from_motherduck",
     #     python_callable=extract_yeasts_from_motherduck,
-    #     provide_context=True,
     # )
 
     # transform_yeasts_task = PythonOperator(
     #     task_id="transform_yeasts_for_mongodb",
     #     python_callable=transform_yeasts_for_mongodb,
-    #     provide_context=True,
     # )
 
     # load_yeasts_task = PythonOperator(
     #     task_id="load_yeasts_to_mongodb",
     #     python_callable=load_yeasts_to_mongodb,
-    #     provide_context=True,
     # )
 
     # Summary task
     summary_task = PythonOperator(
         task_id="migration_summary",
         python_callable=migration_summary,
-        provide_context=True,
         trigger_rule="all_done",  # Run even if some tasks fail
     )
 
