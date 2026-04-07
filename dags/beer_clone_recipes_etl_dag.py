@@ -43,7 +43,7 @@ with DAG(
         'start_date': datetime(2023, 1, 1),
         'retries': 1,
     },
-    schedule_interval=None,
+    schedule=None,
     catchup=False,
     tags=["beer_clone_recipes", "etl", "motherduck", "BJCP", "Brewer's Friend", "parameters"],
 ) as dag:
