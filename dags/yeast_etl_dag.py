@@ -48,19 +48,16 @@ with DAG(
     t1 = PythonOperator(
         task_id="extract_yeasts",
         python_callable=extract_yeasts,
-        provide_context=True,
     )
 
     t2 = PythonOperator(
         task_id="transform_yeasts",
         python_callable=transform_yeasts,
-        provide_context=True,
     )
 
     t3 = PythonOperator(
         task_id="load_yeasts",
         python_callable=load_yeasts,
-        provide_context=True,
     )
 
     t1 >> t2 >> t3  # Set task dependencies 
