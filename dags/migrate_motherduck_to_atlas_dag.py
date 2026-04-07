@@ -262,7 +262,7 @@ with DAG(
     dag_id="migrate_motherduck_to_atlas_dag",
     default_args=default_args,
     description="Migrate catalog data from MotherDuck to MongoDB Atlas",
-    schedule_interval=None,
+    schedule=None,
     catchup=False,
     tags=["migration", "motherduck", "mongodb", "atlas", "catalog"],
     doc_md="""
