@@ -48,19 +48,16 @@ with DAG(
     t1 = PythonOperator(
         task_id="extract_styles",
         python_callable=extract_styles,
-        provide_context=True,
     )
 
     t2 = PythonOperator(
         task_id="transform_styles",
         python_callable=transform_styles,
-        provide_context=True,
     )
 
     t3 = PythonOperator(
         task_id="load_styles",
         python_callable=load_styles,
-        provide_context=True,
     )
 
     t1 >> t2 >> t3
