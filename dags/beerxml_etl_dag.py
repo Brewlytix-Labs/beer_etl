@@ -473,7 +473,7 @@ with DAG(
         'retries': 1,
         'retry_delay': 300,  # 5 minutes
     },
-    schedule_interval=None,  # Manual trigger only
+    schedule=None,  # Manual trigger only
     catchup=False,
     tags=["beerxml", "etl", "s3", "motherduck", "recipes"],
     description="ETL pipeline for BeerXML recipe files stored in S3",
