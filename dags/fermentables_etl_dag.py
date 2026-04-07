@@ -40,7 +40,7 @@ def load_fermentables(**context):
 with DAG(
     dag_id="fermentables_etl_dag",
     default_args=default_args,
-    schedule_interval=None,
+    schedule=None,
     catchup=False,
     tags=["fermentables", "etl", "motherduck", "beermaverick"],
 ) as dag:
