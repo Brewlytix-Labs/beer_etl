@@ -40,7 +40,7 @@ def load_styles(**context):
 with DAG(
     dag_id="styles_etl_dag",
     default_args=default_args,
-    schedule_interval=None,
+    schedule=None,
     catchup=False,
     tags=["beer_styles", "etl", "motherduck", "BJCP" ],
 ) as dag:
