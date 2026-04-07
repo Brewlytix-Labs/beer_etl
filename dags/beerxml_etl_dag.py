@@ -483,21 +483,18 @@ with DAG(
     extract_task = PythonOperator(
         task_id="extract_beerxml",
         python_callable=extract_beerxml,
-        provide_context=True,
     )
 
     # Flatten task
     flatten_task = PythonOperator(
         task_id="flatten_beerxml",
         python_callable=flatten_beerxml,
-        provide_context=True,
     )
 
     # Load task
     load_task = PythonOperator(
         task_id="load_beerxml",
         python_callable=load_beerxml,
-        provide_context=True,
     )
 
     # Define task dependencies
