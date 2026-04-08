@@ -8,49 +8,64 @@ import re
 #####################################################################
 ## Transform clone recipe list from https://www.brewersfriend.com  ##
 #####################################################################
-def transform_clone_recipes_data(df: pd.DataFrame) -> pd.DataFrame:
+def transform_fermentables_data(df):
     """
-    Cleans and types the raw clone-recipes DataFrame.
+    Transforms raw fermentables data into clean schema
     """
     df = df.copy()
 
-    # 1) Strip whitespace
-    for col in ['title','url','style','batch_size','og','fg','abv','ibu','color','brewed']:
-        df[col] = df[col].astype(str).str.strip()
+    def extract_pct(val):
+        if pd.isna(val):
+            return None
+        val = str(val)
+        match = re.search(r'(\d{1,3}(\.\d+)?)%', val)
+        return float(match.group(1)) if match else None
 
-    # 2) Drop duplicate URLs
-    df = df.drop_duplicates(subset=['url']).reset_index(drop=True)
+    def extract_srm(val):
+        if pd.isna(val):
+            return None
+        val = str(val)
+        match = re.search(r'(\d+(\.\d+)?)', val)
+        return float(match.group(1)) if match else None
 
-    # 3) Parse batch_size into qty + unit
-    def parse_size(s):
-        m = re.match(r'(\d+(\.\d+)?)\s*([A-Za-z]+)', s)
-        return (float(m.group(1)), m.group(3).lower()) if m else (None, None)
-    df[['batch_qty','batch_unit']] = df['batch_size'].apply(
-        lambda s: pd.Series(parse_size(s))
-    )
+    def extract_ppg(val):
+        if pd.isna(val):
+            return None
+        val = str(val)
+        match = re.search(r'(\d{2})\s*ppg', val, re.IGNORECASE)
+        return int(match.group(1)) if match else None
 
-    # 4) Numeric casts
-    df['og']  = pd.to_numeric(df['og'], errors='coerce')
-    df['fg']  = pd.to_numeric(df['fg'], errors='coerce')
-    df['abv'] = df['abv'].str.replace('%','',regex=False).astype(float, errors='ignore')
-    df['ibu'] = pd.to_numeric(df['ibu'], errors='coerce')
-    df['color'] = pd.to_numeric(df['color'], errors='coerce')
+    def extract_dpower(val):
+        if pd.isna(val):
+            return None
+        val = str(val)
+        match = re.search(r'(\d+(\.\d+)?)\s*[°Â]?\s*lintner', val, re.IGNORECASE)
+        return float(match.group(1)) if match else None
 
-    # 5) Parse brewed date
-    def parse_date(s):
-        for fmt in ("%Y-%m-%d","%b %d, %Y"):
-            try:
-                return datetime.strptime(s, fmt).date()
-            except:
-                continue
-        return None
-    df['brewed_date'] = df['brewed'].apply(parse_date)
+    if 'potential_yield' in df.columns:
+        df['yield_pct'] = df['potential_yield'].apply(extract_pct)
+        df['ppg'] = df['potential_yield'].apply(extract_ppg)
+    else:
+        df['yield_pct'] = None
+        df['ppg'] = None
 
-    # 6) Normalize style (Title Case)
-    df['style'] = df['style'].str.title()
+    if 'max_usage' in df.columns:
+        df['max_usage_pct'] = df['max_usage'].apply(extract_pct)
+    else:
+        df['max_usage_pct'] = None
 
-    # 7) Derive a slug
-    df['slug'] = df['url'].str.rstrip('/').str.extract(r'/([^/]+)$')[0]
+    if 'srm' in df.columns:
+        df['srm'] = df['srm'].apply(extract_srm)
+    else:
+        df['srm'] = None
+
+    if 'diastatic_power' in df.columns:
+        df['diastatic_power'] = df['diastatic_power'].apply(extract_dpower)
+    else:
+        df['diastatic_power'] = None
+
+    df.replace("Unknown", None, inplace=True)
+    df.replace("", None, inplace=True)
 
     return df
 
