@@ -23,10 +23,14 @@ def extract_fermentables(**context):
     context['ti'].xcom_push(key='raw_fermentables_df', value=df.to_dict(orient='records'))
 
 def transform_fermentables(**context):
-    print("🧪 Transforming hop data...")
+    print("🧪 Transforming fermentables data...")
     raw_dict = context['ti'].xcom_pull(task_ids='extract_fermentables', key='raw_fermentables_df')
     df = pd.DataFrame(raw_dict)
     df = transform_fermentables_data(df)
+
+    # Convert pandas NaN / NaT to JSON-safe None before XCom serialization
+    df = df.where(pd.notnull(df), None)
+
     print(f"✅ Transformed {len(df)} fermentables")
     context['ti'].xcom_push(key='clean_fermentables_df', value=df.to_dict(orient='records'))
 
