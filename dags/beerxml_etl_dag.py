@@ -230,7 +230,10 @@ def sanitize_recipes_for_mongo(recipes):
             y['attenuation_pct'] = _to_int(y.get('attenuation_pct'), default=None, min_value=0, max_value=100)
             y['min_temp_C'] = _to_float(y.get('min_temp_C'), default=None)
             y['max_temp_C'] = _to_float(y.get('max_temp_C'), default=None)
-            y['amount_cells_billion'] = _to_float(y.get('amount_cells_billion'), default=None, min_value=0.0)
+            # FQ-1440: the import writes a yeast's amount as a typed {value, unit} and no cell count, so a cell count is
+            # normalised only when present. Adding it as null would make the Synth cutover refuse the recipe.
+            if 'amount_cells_billion' in y:
+                y['amount_cells_billion'] = _to_float(y.get('amount_cells_billion'), default=None, min_value=0.0)
             cleaned_yeasts.append(y)
         doc['yeasts'] = cleaned_yeasts
 
