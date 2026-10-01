@@ -381,6 +381,8 @@ def extract_fermentable_data(fermentable_elem, namespace: Dict) -> Optional[Dict
     amount = ns_or_plain(get_numeric, fermentable_elem, 'AMOUNT', 0)
     # BeerXML 1.0 gives a fermentable's AMOUNT in kilograms (FQ-1440). The import used to take any amount over 0.1 as
     # pounds (2.7216 kg of extract became 1,234.48 g) and store any smaller one as kilograms under a grams label.
+    # amount_g carries it exactly. No `original` is written: the recipe content schema's one slot there is
+    # amount_lb, and the import used to put the kilogram figure in it.
     amount_g = amount * 1000.0
     
     fermentable_type = get_text(fermentable_elem, 'beerxml:TYPE') or get_text(fermentable_elem, 'TYPE', 'Grain')
@@ -418,10 +420,7 @@ def extract_fermentable_data(fermentable_elem, namespace: Dict) -> Optional[Dict
         "late_addition": get_text(fermentable_elem, 'beerxml:ADD_AFTER_BOIL') == 'TRUE' or get_text(fermentable_elem, 'ADD_AFTER_BOIL') == 'TRUE',
         "origin": get_text(fermentable_elem, 'beerxml:ORIGIN') or get_text(fermentable_elem, 'ORIGIN'),
         "diastatic_power_Lintner": ns_or_plain(get_numeric, fermentable_elem, 'DIASTATIC_POWER'),
-        "notes": get_text(fermentable_elem, 'beerxml:NOTES') or get_text(fermentable_elem, 'NOTES'),
-        "original": {
-            "amount_kg": amount
-        }
+        "notes": get_text(fermentable_elem, 'beerxml:NOTES') or get_text(fermentable_elem, 'NOTES')
     }
 
 
@@ -613,7 +612,7 @@ def extract_yeast_data(yeast_elem, namespace: Dict) -> Optional[Dict[str, Any]]:
     if attenuation and attenuation > 100:
         attenuation = 100  # Cap at maximum allowed by schema
     
-    return {
+    yeast = {
         "_ref": {
             "catalog_yeasts_id": None
         },
@@ -623,13 +622,14 @@ def extract_yeast_data(yeast_elem, namespace: Dict) -> Optional[Dict[str, Any]]:
         "attenuation_pct": attenuation,
         "min_temp_C": ns_or_plain(get_numeric, yeast_elem, 'MIN_TEMPERATURE'),
         "max_temp_C": ns_or_plain(get_numeric, yeast_elem, 'MAX_TEMPERATURE'),
-        # BeerXML 1.0 gives a yeast's AMOUNT in litres, or in kilograms when AMOUNT_IS_WEIGHT is TRUE: a volume or a
-        # weight, never a cell count (FQ-1440). It is kept in its own unit, and the cell count stays unknown.
-        "amount_cells_billion": None,
-        "amount_l": None if yeast_by_weight else yeast_amount,
-        "amount_kg": yeast_amount if yeast_by_weight else None,
         "notes": get_text(yeast_elem, 'beerxml:NOTES') or get_text(yeast_elem, 'NOTES')
     }
+    # BeerXML 1.0 gives a yeast's AMOUNT in litres, or in kilograms when AMOUNT_IS_WEIGHT is TRUE: a volume or a weight,
+    # never a cell count (FQ-1440). It is written as the recipe content schema's typed amount, in its own unit.
+    # amount_cells_billion is left out: the cell count is unknown, and the Synth cutover refuses a null there.
+    if yeast_amount is not None:
+        yeast["amount"] = {"value": yeast_amount, "unit": "kg" if yeast_by_weight else "L"}
+    return yeast
 
 
 def extract_miscs(recipe_elem, namespace: Dict) -> List[Dict[str, Any]]:
@@ -694,9 +694,9 @@ def extract_misc_data(misc_elem, namespace: Dict) -> Optional[Dict[str, Any]]:
     
     amount = ns_or_plain(get_numeric, misc_elem, 'AMOUNT', 0)
     # BeerXML 1.0 gives a misc's AMOUNT in kilograms when AMOUNT_IS_WEIGHT is TRUE, and in litres otherwise (FQ-1440).
-    # The import used to take any amount over 0.01 as ounces. A volume is kept in millilitres too; its amount_g,
-    # which the recipe schema requires, reads one millilitre as one gram.
-    misc_by_weight = is_true(get_text(misc_elem, 'beerxml:AMOUNT_IS_WEIGHT') or get_text(misc_elem, 'AMOUNT_IS_WEIGHT'))
+    # The import used to take any amount over 0.01 as ounces. Either way it is written as amount_g, which the DAG's
+    # sanitize step, the Mongo validator and the recipe schema all expect: a weight exactly, a volume reading one
+    # millilitre as one gram.
     amount_g = amount * 1000.0
     
     time_min = ns_or_plain(get_numeric, misc_elem, 'TIME', 0)
@@ -707,7 +707,6 @@ def extract_misc_data(misc_elem, namespace: Dict) -> Optional[Dict[str, Any]]:
         "use": use,
         "time_min": time_min,
         "amount_g": amount_g,
-        "amount_ml": None if misc_by_weight else amount * 1000.0,
         "notes": get_text(misc_elem, 'beerxml:NOTES') or get_text(misc_elem, 'NOTES')
     }
 
