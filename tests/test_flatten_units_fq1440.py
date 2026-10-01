@@ -135,5 +135,33 @@ class YeastEdgesFQ1440(unittest.TestCase):
         self.assertEqual(by['Zero Lager']['amount_kg'], 0.0)  # not None: a real 0 is a value
 
 
+class NamespacedZerosFQ1440(unittest.TestCase):
+    """Round 3 (VERITY's follow-up): on a namespaced BeerXML 0.9 document, a real 0 is a value."""
+
+    @classmethod
+    def setUpClass(cls):
+        xml = ('<RECIPES xmlns="http://www.beerxml.com/beerxml_0.9"><RECIPE>'
+               '<NAME>FQ-1440 Zeros</NAME><VERSION>1</VERSION><TYPE>All Grain</TYPE><BREWER>FORGE</BREWER>'
+               '<BATCH_SIZE>20.0</BATCH_SIZE><BOIL_SIZE>24.0</BOIL_SIZE><BOIL_TIME>0</BOIL_TIME><EFFICIENCY>70</EFFICIENCY>'
+               '<IBU>0</IBU>'
+               '<FERMENTABLES><FERMENTABLE><NAME>Table Sugar</NAME><VERSION>1</VERSION><TYPE>Sugar</TYPE>'
+               '<AMOUNT>0.5</AMOUNT><YIELD>100</YIELD><COLOR>0</COLOR></FERMENTABLE></FERMENTABLES>'
+               '<YEASTS><YEAST><NAME>US-05</NAME><VERSION>1</VERSION><TYPE>Ale</TYPE><FORM>Dry</FORM>'
+               '<AMOUNT>0.0115</AMOUNT><AMOUNT_IS_WEIGHT>TRUE</AMOUNT_IS_WEIGHT></YEAST></YEASTS>'
+               '</RECIPE></RECIPES>')
+        recipes = flatten.flatten_beerxml_to_json(xml, 'fq1440/zeros.xml')
+        assert len(recipes) == 1, recipes
+        cls.r = recipes[0]
+
+    def test_a_zero_boil_time_stays_zero(self):
+        self.assertEqual(self.r['batch']['boil_time_min'], 0)  # was 60, the plain tag's default
+
+    def test_a_sugars_zero_color_stays_zero(self):
+        self.assertEqual(self.r['fermentables'][0]['color_srm'], 0.0)  # was None
+
+    def test_a_zero_ibu_stays_zero(self):
+        self.assertEqual(self.r['estimates']['ibu']['value'], 0.0)  # was None
+
+
 if __name__ == "__main__":
     unittest.main()
