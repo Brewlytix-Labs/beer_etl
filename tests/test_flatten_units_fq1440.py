@@ -1,0 +1,118 @@
+"""FQ-1440: the BeerXML import stores BeerXML 1.0's own units.
+
+BeerXML 1.0 gives batch and boil sizes in litres, fermentable and hop amounts in kilograms, and a misc's or a yeast's
+amount in kilograms when AMOUNT_IS_WEIGHT is TRUE and in litres otherwise. The import used to guess instead: a batch
+over 10 was gallons (20.82 L became 78.81 L), a fermentable over 0.1 was pounds, a hop or misc over 0.01 was ounces, a
+smaller amount was stored as kilograms under a grams label, and every yeast whose TYPE was not one of five exact words
+became Ale. Each case below is a value COWORK found in the Recipe Bank (UAT row RC03.1), read the right way.
+
+Runs with the standard library's unittest (and under pytest). flatten.py imports pytz and bson for timestamps and ids
+only; when they are not installed, they are stubbed, because no unit depends on them.
+"""
+import datetime
+import importlib.util
+import os
+import sys
+import types
+import unittest
+
+for _mod in ("pytz", "bson"):
+    try:
+        __import__(_mod)
+    except ImportError:
+        _stub = types.ModuleType(_mod)
+        if _mod == "bson":
+            _stub.ObjectId = type("ObjectId", (str,), {})
+        else:
+            _stub.timezone = lambda name: datetime.timezone.utc
+            _stub.UTC = datetime.timezone.utc
+        sys.modules[_mod] = _stub
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_FLATTEN = os.environ.get("FQ1440_FLATTEN") or os.path.join(_HERE, "..", "include", "etl", "flatten.py")
+_spec = importlib.util.spec_from_file_location("fq1440_flatten", _FLATTEN)
+flatten = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(flatten)
+
+RECIPE = """<?xml version="1.0" encoding="UTF-8"?>
+<RECIPES>
+  <RECIPE>
+    <NAME>FQ-1440 Corona clone</NAME><VERSION>1</VERSION><TYPE>All Grain</TYPE><BREWER>FORGE</BREWER>
+    <BATCH_SIZE>25.0</BATCH_SIZE><BOIL_SIZE>30.0</BOIL_SIZE><BOIL_TIME>60</BOIL_TIME><EFFICIENCY>72</EFFICIENCY>
+    <FERMENTABLES>
+      <FERMENTABLE><NAME>Wheat Malt Extract</NAME><VERSION>1</VERSION><TYPE>Extract</TYPE><AMOUNT>2.7216</AMOUNT>
+        <YIELD>78</YIELD><COLOR>4</COLOR></FERMENTABLE>
+      <FERMENTABLE><NAME>Black Malt</NAME><VERSION>1</VERSION><TYPE>Grain</TYPE><AMOUNT>0.03</AMOUNT>
+        <YIELD>55</YIELD><COLOR>500</COLOR></FERMENTABLE>
+    </FERMENTABLES>
+    <HOPS>
+      <HOP><NAME>Hallertau Hersbrucker</NAME><VERSION>1</VERSION><ALPHA>4.0</ALPHA><AMOUNT>0.0283495</AMOUNT>
+        <USE>Boil</USE><TIME>60</TIME><FORM>Pellet</FORM></HOP>
+      <HOP><NAME>Magnum</NAME><VERSION>1</VERSION><ALPHA>12.0</ALPHA><AMOUNT>0.00001</AMOUNT>
+        <USE>Boil</USE><TIME>60</TIME><FORM>Pellet</FORM></HOP>
+    </HOPS>
+    <YEASTS>
+      <YEAST><NAME>Bavarian Lager M76</NAME><VERSION>1</VERSION><TYPE>lager</TYPE><FORM>Dry</FORM>
+        <AMOUNT>0.011</AMOUNT><AMOUNT_IS_WEIGHT>TRUE</AMOUNT_IS_WEIGHT></YEAST>
+      <YEAST><NAME>Bohemian Lager 2124</NAME><VERSION>1</VERSION><FORM>Liquid</FORM><AMOUNT>0.125</AMOUNT></YEAST>
+      <YEAST><NAME>US-05</NAME><VERSION>1</VERSION><TYPE>Ale</TYPE><FORM>Dry</FORM><AMOUNT>0.0115</AMOUNT>
+        <AMOUNT_IS_WEIGHT>true</AMOUNT_IS_WEIGHT></YEAST>
+      <YEAST><NAME>House strain</NAME><VERSION>1</VERSION><TYPE>Bottom</TYPE><FORM>Liquid</FORM></YEAST>
+    </YEASTS>
+    <MISCS>
+      <MISC><NAME>Irish Moss</NAME><VERSION>1</VERSION><TYPE>Fining</TYPE><USE>Boil</USE><TIME>15</TIME>
+        <AMOUNT>0.005</AMOUNT><AMOUNT_IS_WEIGHT>TRUE</AMOUNT_IS_WEIGHT></MISC>
+      <MISC><NAME>Lactic Acid</NAME><VERSION>1</VERSION><TYPE>Water Agent</TYPE><USE>Mash</USE><TIME>0</TIME>
+        <AMOUNT>0.002</AMOUNT></MISC>
+    </MISCS>
+  </RECIPE>
+</RECIPES>
+"""
+
+
+class FlattenUnitsFQ1440(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        recipes = flatten.flatten_beerxml_to_json(RECIPE, "fq1440/test.xml")
+        assert len(recipes) == 1, recipes
+        cls.r = recipes[0]
+
+    def test_batch_and_boil_sizes_are_litres(self):
+        self.assertAlmostEqual(self.r["batch"]["target_volume_L"], 25.0)
+        self.assertAlmostEqual(self.r["batch"]["boil_volume_L"], 30.0)
+
+    def test_fermentables_are_kilograms(self):
+        by = {f["name"]: f for f in self.r["fermentables"]}
+        self.assertAlmostEqual(by["Wheat Malt Extract"]["amount_g"], 2721.6)
+        self.assertAlmostEqual(by["Wheat Malt Extract"]["original"]["amount_kg"], 2.7216)
+        self.assertAlmostEqual(by["Black Malt"]["amount_g"], 30.0)  # 0.03 kg, once stored as "0.03 g"
+
+    def test_hops_are_kilograms(self):
+        by = {h["name"]: h for h in self.r["hops"]}
+        self.assertAlmostEqual(by["Hallertau Hersbrucker"]["amount_g"], 28.3495)  # 1 oz, once "0.80 g"
+        self.assertAlmostEqual(by["Magnum"]["amount_g"], 0.01)
+
+    def test_yeast_type_and_amount(self):
+        by = {y["name"]: y for y in self.r["yeasts"]}
+        self.assertEqual(by["Bavarian Lager M76"]["type"], "Lager")  # TYPE in another case
+        self.assertEqual(by["Bohemian Lager 2124"]["type"], "Lager")  # no TYPE: read from its name
+        self.assertEqual(by["US-05"]["type"], "Ale")
+        self.assertEqual(by["House strain"]["type"], "Ale")  # no word to read: the schema's fallback
+        self.assertAlmostEqual(by["Bavarian Lager M76"]["amount_kg"], 0.011)
+        self.assertIsNone(by["Bavarian Lager M76"]["amount_l"])
+        self.assertAlmostEqual(by["Bohemian Lager 2124"]["amount_l"], 0.125)
+        self.assertIsNone(by["Bohemian Lager 2124"]["amount_kg"])
+        self.assertAlmostEqual(by["US-05"]["amount_kg"], 0.0115)  # AMOUNT_IS_WEIGHT in lower case
+        for y in by.values():
+            self.assertIsNone(y["amount_cells_billion"])  # BeerXML gives no cell count
+
+    def test_miscs_by_weight_or_volume(self):
+        by = {m["name"]: m for m in self.r["miscs"]}
+        self.assertAlmostEqual(by["Irish Moss"]["amount_g"], 5.0)
+        self.assertIsNone(by["Irish Moss"]["amount_ml"])
+        self.assertAlmostEqual(by["Lactic Acid"]["amount_ml"], 2.0)
+        self.assertAlmostEqual(by["Lactic Acid"]["amount_g"], 2.0)  # one millilitre read as one gram
+
+
+if __name__ == "__main__":
+    unittest.main()

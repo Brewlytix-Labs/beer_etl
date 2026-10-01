@@ -188,9 +188,10 @@ def flatten_recipe_element(recipe_elem, file_key: str, org_id: str, namespace: D
         if efficiency and efficiency > 100:
             efficiency = 100
         
-        # Convert to liters if needed (assuming input is in gallons)
-        target_volume_L = batch_size * 3.78541 if batch_size > 10 else batch_size  # Convert gallons to liters if > 10
-        boil_volume_L = boil_size * 3.78541 if boil_size and boil_size > 10 else boil_size
+        # BeerXML 1.0 gives BATCH_SIZE and BOIL_SIZE in litres, so they are stored as they are (FQ-1440). The import
+        # used to take any batch over 10 as gallons and multiply it by 3.78541, so a 20.82 L batch became 78.81 L.
+        target_volume_L = batch_size
+        boil_volume_L = boil_size
         
         # Extract style information
         style_data = extract_style_data(recipe_elem, namespace)
@@ -366,8 +367,9 @@ def extract_fermentable_data(fermentable_elem, namespace: Dict) -> Optional[Dict
         return None
     
     amount = get_numeric(fermentable_elem, 'beerxml:AMOUNT') or get_numeric(fermentable_elem, 'AMOUNT', 0)
-    # Convert to grams if needed (assuming input is in pounds)
-    amount_g = amount * 453.592 if amount > 0.1 else amount
+    # BeerXML 1.0 gives a fermentable's AMOUNT in kilograms (FQ-1440). The import used to take any amount over 0.1 as
+    # pounds (2.7216 kg of extract became 1,234.48 g) and store any smaller one as kilograms under a grams label.
+    amount_g = amount * 1000.0
     
     fermentable_type = get_text(fermentable_elem, 'beerxml:TYPE') or get_text(fermentable_elem, 'TYPE', 'Grain')
     type_mapping = {
@@ -406,7 +408,7 @@ def extract_fermentable_data(fermentable_elem, namespace: Dict) -> Optional[Dict
         "diastatic_power_Lintner": get_numeric(fermentable_elem, 'beerxml:DIASTATIC_POWER') or get_numeric(fermentable_elem, 'DIASTATIC_POWER'),
         "notes": get_text(fermentable_elem, 'beerxml:NOTES') or get_text(fermentable_elem, 'NOTES'),
         "original": {
-            "amount_lb": amount if amount > 0.1 else None
+            "amount_kg": amount
         }
     }
 
@@ -461,8 +463,9 @@ def extract_hop_data(hop_elem, namespace: Dict) -> Optional[Dict[str, Any]]:
         return None
     
     amount = get_numeric(hop_elem, 'beerxml:AMOUNT') or get_numeric(hop_elem, 'AMOUNT', 0)
-    # Convert to grams if needed (assuming input is in ounces)
-    amount_g = amount * 28.3495 if amount > 0.01 else amount
+    # BeerXML 1.0 gives a hop's AMOUNT in kilograms (FQ-1440). The import used to take any amount over 0.01 as ounces
+    # (1 oz, 0.0283 kg, became 0.80 g) and store any smaller one as kilograms under a grams label (0.01 g).
+    amount_g = amount * 1000.0
     
     use = get_text(hop_elem, 'beerxml:USE') or get_text(hop_elem, 'USE', 'Boil')
     use_mapping = {
@@ -503,6 +506,29 @@ def extract_hop_data(hop_elem, namespace: Dict) -> Optional[Dict[str, Any]]:
         "origin": get_text(hop_elem, 'beerxml:ORIGIN') or get_text(hop_elem, 'ORIGIN'),
         "notes": get_text(hop_elem, 'beerxml:NOTES') or get_text(hop_elem, 'NOTES')
     }
+
+
+def is_true(value) -> bool:
+    """BeerXML's booleans are the words TRUE and FALSE, in any case."""
+    return value is not None and str(value).strip().upper() == 'TRUE'
+
+
+def yeast_type_of(name: str, raw_type) -> str:
+    """A yeast's type, as one of the five the recipe schema allows (FQ-1440).
+
+    BeerXML's TYPE is read in any case. When it is missing or none of the five, the yeast's own name is read before
+    the Ale fallback: the import used to write Ale for every such yeast, so a Bavarian Lager read (Ale).
+    """
+    canonical = {'ale': 'Ale', 'lager': 'Lager', 'wheat': 'Wheat', 'wine': 'Wine', 'champagne': 'Champagne'}
+    found = canonical.get(str(raw_type or '').strip().lower())
+    if found:
+        return found
+    lowered = (name or '').lower()
+    for word, yeast_type in (('lager', 'Lager'), ('pils', 'Lager'), ('wheat', 'Wheat'), ('weizen', 'Wheat'),
+                             ('hefe', 'Wheat'), ('champagne', 'Champagne'), ('wine', 'Wine')):
+        if word in lowered:
+            return yeast_type
+    return 'Ale'
 
 
 def extract_yeasts(recipe_elem, namespace: Dict) -> List[Dict[str, Any]]:
@@ -554,15 +580,7 @@ def extract_yeast_data(yeast_elem, namespace: Dict) -> Optional[Dict[str, Any]]:
     if not name:
         return None
     
-    yeast_type = get_text(yeast_elem, 'beerxml:TYPE') or get_text(yeast_elem, 'TYPE', 'Ale')
-    type_mapping = {
-        'Ale': 'Ale',
-        'Lager': 'Lager',
-        'Wheat': 'Wheat',
-        'Wine': 'Wine',
-        'Champagne': 'Champagne'
-    }
-    yeast_type = type_mapping.get(yeast_type, 'Ale')
+    yeast_type = yeast_type_of(name, get_text(yeast_elem, 'beerxml:TYPE') or get_text(yeast_elem, 'TYPE'))
     
     form = get_text(yeast_elem, 'beerxml:FORM') or get_text(yeast_elem, 'FORM', 'Liquid')
     form_mapping = {
@@ -573,6 +591,9 @@ def extract_yeast_data(yeast_elem, namespace: Dict) -> Optional[Dict[str, Any]]:
     }
     form = form_mapping.get(form, 'Liquid')
     
+    yeast_amount = get_numeric(yeast_elem, 'beerxml:AMOUNT') or get_numeric(yeast_elem, 'AMOUNT')
+    yeast_by_weight = is_true(get_text(yeast_elem, 'beerxml:AMOUNT_IS_WEIGHT') or get_text(yeast_elem, 'AMOUNT_IS_WEIGHT'))
+
     # Get attenuation percentage and cap at 100% to match schema constraint
     attenuation = get_int(yeast_elem, 'beerxml:ATTENUATION') or get_int(yeast_elem, 'ATTENUATION')
     if attenuation and attenuation > 100:
@@ -588,7 +609,11 @@ def extract_yeast_data(yeast_elem, namespace: Dict) -> Optional[Dict[str, Any]]:
         "attenuation_pct": attenuation,
         "min_temp_C": get_numeric(yeast_elem, 'beerxml:MIN_TEMPERATURE') or get_numeric(yeast_elem, 'MIN_TEMPERATURE'),
         "max_temp_C": get_numeric(yeast_elem, 'beerxml:MAX_TEMPERATURE') or get_numeric(yeast_elem, 'MAX_TEMPERATURE'),
-        "amount_cells_billion": get_numeric(yeast_elem, 'beerxml:AMOUNT') or get_numeric(yeast_elem, 'AMOUNT'),
+        # BeerXML 1.0 gives a yeast's AMOUNT in litres, or in kilograms when AMOUNT_IS_WEIGHT is TRUE: a volume or a
+        # weight, never a cell count (FQ-1440). It is kept in its own unit, and the cell count stays unknown.
+        "amount_cells_billion": None,
+        "amount_l": None if yeast_by_weight else yeast_amount,
+        "amount_kg": yeast_amount if yeast_by_weight else None,
         "notes": get_text(yeast_elem, 'beerxml:NOTES') or get_text(yeast_elem, 'NOTES')
     }
 
@@ -654,8 +679,11 @@ def extract_misc_data(misc_elem, namespace: Dict) -> Optional[Dict[str, Any]]:
     use = use_mapping.get(use, 'Boil')
     
     amount = get_numeric(misc_elem, 'beerxml:AMOUNT') or get_numeric(misc_elem, 'AMOUNT', 0)
-    # Convert to grams if needed (assuming input is in ounces)
-    amount_g = amount * 28.3495 if amount > 0.01 else amount
+    # BeerXML 1.0 gives a misc's AMOUNT in kilograms when AMOUNT_IS_WEIGHT is TRUE, and in litres otherwise (FQ-1440).
+    # The import used to take any amount over 0.01 as ounces. A volume is kept in millilitres too; its amount_g,
+    # which the recipe schema requires, reads one millilitre as one gram.
+    misc_by_weight = is_true(get_text(misc_elem, 'beerxml:AMOUNT_IS_WEIGHT') or get_text(misc_elem, 'AMOUNT_IS_WEIGHT'))
+    amount_g = amount * 1000.0
     
     time_min = get_numeric(misc_elem, 'beerxml:TIME') or get_numeric(misc_elem, 'TIME', 0)
     
@@ -665,6 +693,7 @@ def extract_misc_data(misc_elem, namespace: Dict) -> Optional[Dict[str, Any]]:
         "use": use,
         "time_min": time_min,
         "amount_g": amount_g,
+        "amount_ml": None if misc_by_weight else amount * 1000.0,
         "notes": get_text(misc_elem, 'beerxml:NOTES') or get_text(misc_elem, 'NOTES')
     }
 
