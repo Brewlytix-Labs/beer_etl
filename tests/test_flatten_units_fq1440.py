@@ -15,6 +15,7 @@ import os
 import sys
 import types
 import unittest
+import xml.etree.ElementTree as ET
 
 for _mod in ("pytz", "bson"):
     try:
@@ -112,6 +113,26 @@ class FlattenUnitsFQ1440(unittest.TestCase):
         self.assertIsNone(by["Irish Moss"]["amount_ml"])
         self.assertAlmostEqual(by["Lactic Acid"]["amount_ml"], 2.0)
         self.assertAlmostEqual(by["Lactic Acid"]["amount_g"], 2.0)  # one millilitre read as one gram
+
+
+class YeastEdgesFQ1440(unittest.TestCase):
+    """Round 2 (VERITY's notes): a namespaced BeerXML 0.9 document, as the import reads it."""
+
+    NS = {'beerxml': 'http://www.beerxml.com/beerxml_0.9'}
+
+    def yeasts(self, body):
+        recipe = ET.fromstring('<RECIPE xmlns="http://www.beerxml.com/beerxml_0.9"><YEASTS>%s</YEASTS></RECIPE>' % body)
+        return {y['name']: y for y in flatten.extract_yeasts(recipe, self.NS)}
+
+    def test_a_barleywine_yeast_is_an_ale(self):
+        by = self.yeasts('<YEAST><NAME>Barleywine Ale Yeast</NAME><VERSION>1</VERSION><FORM>Liquid</FORM>'
+                         '<AMOUNT>0.1</AMOUNT></YEAST>')
+        self.assertEqual(by['Barleywine Ale Yeast']['type'], 'Ale')  # 'wine' is inside 'barleywine'
+
+    def test_a_zero_amount_stays_zero(self):
+        by = self.yeasts('<YEAST><NAME>Zero Lager</NAME><VERSION>1</VERSION><TYPE>Lager</TYPE><FORM>Dry</FORM>'
+                         '<AMOUNT>0</AMOUNT><AMOUNT_IS_WEIGHT>TRUE</AMOUNT_IS_WEIGHT></YEAST>')
+        self.assertEqual(by['Zero Lager']['amount_kg'], 0.0)  # not None: a real 0 is a value
 
 
 if __name__ == "__main__":

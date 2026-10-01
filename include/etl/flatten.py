@@ -524,8 +524,10 @@ def yeast_type_of(name: str, raw_type) -> str:
     if found:
         return found
     lowered = (name or '').lower()
-    for word, yeast_type in (('lager', 'Lager'), ('pils', 'Lager'), ('wheat', 'Wheat'), ('weizen', 'Wheat'),
-                             ('hefe', 'Wheat'), ('champagne', 'Champagne'), ('wine', 'Wine')):
+    # A barleywine is an ale, so its name is read before 'wine' could match inside it.
+    for word, yeast_type in (('barleywine', 'Ale'), ('barley wine', 'Ale'), ('lager', 'Lager'), ('pils', 'Lager'),
+                             ('wheat', 'Wheat'), ('weizen', 'Wheat'), ('hefe', 'Wheat'), ('champagne', 'Champagne'),
+                             ('wine', 'Wine')):
         if word in lowered:
             return yeast_type
     return 'Ale'
@@ -591,7 +593,10 @@ def extract_yeast_data(yeast_elem, namespace: Dict) -> Optional[Dict[str, Any]]:
     }
     form = form_mapping.get(form, 'Liquid')
     
-    yeast_amount = get_numeric(yeast_elem, 'beerxml:AMOUNT') or get_numeric(yeast_elem, 'AMOUNT')
+    # A real 0 is a value, so the plain tag is read only when the namespaced one is missing (an `or` dropped a 0).
+    yeast_amount = get_numeric(yeast_elem, 'beerxml:AMOUNT')
+    if yeast_amount is None:
+        yeast_amount = get_numeric(yeast_elem, 'AMOUNT')
     yeast_by_weight = is_true(get_text(yeast_elem, 'beerxml:AMOUNT_IS_WEIGHT') or get_text(yeast_elem, 'AMOUNT_IS_WEIGHT'))
 
     # Get attenuation percentage and cap at 100% to match schema constraint
